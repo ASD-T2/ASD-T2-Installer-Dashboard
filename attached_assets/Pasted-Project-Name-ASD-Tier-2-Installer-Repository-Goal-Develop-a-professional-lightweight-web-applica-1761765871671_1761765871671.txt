@@ -1,0 +1,90 @@
+Project Name: ASD Tier 2 Installer Repository
+
+Goal:
+Develop a professional, lightweight web application that connects to the GitHub repository
+👉 https://github.com/ASD-T2/ASD_Installer-repo
+
+to list available installer files for authorized team members to download.
+
+🧠 Core Requirements
+
+Platform: Web
+Hosting: Free Replit hosting (no Always-On, no paid plans)
+Connectivity: Online (internet required)
+Storage: No binaries or installers stored on Replit; all files are hosted in GitHub.
+
+🎨 Interface & Design
+
+Create a clean, professional dashboard showing all installers in a structured, user-friendly way:
+
+Columns or cards for:
+
+File name
+
+Description (if available)
+
+Version number (if in filename or metadata)
+
+Download button (links to GitHub raw file)
+
+Responsive layout using Bootstrap or Tailwind CSS.
+
+Optional: add a search/filter bar to find installers quickly.
+
+🔐 Authorization
+
+Restrict access so only approved users can download:
+
+Implement simple username/password login (store credentials securely in Replit Secrets).
+
+After successful login, show the installer list page.
+
+Unauthorized users see a login form only.
+
+🔗 GitHub Integration
+
+Use the GitHub REST API to list installer files dynamically.
+Example endpoint:
+
+https://api.github.com/repos/ASD-T2/ASD_Installer-repo/contents/
+
+
+Parse and display file metadata (name, type, download URL).
+
+“Download” buttons should link directly to the file’s raw URL (e.g., https://raw.githubusercontent.com/ASD-T2/ASD_Installer-repo/main/filename.exe).
+
+⚙️ Technical Stack
+
+Backend: Flask (Python)
+
+Frontend: HTML, CSS, JS (Bootstrap/Tailwind)
+
+Data Source: GitHub API
+
+Auth: Flask session-based login; credentials stored as environment variables
+
+Deployment: Default Replit “Run” setup; minimal server load; compatible with free tier
+
+🌍 Language Settings
+
+Replit Agent Interaction: English
+
+Application Interface: English
+
+📝 Additional Notes
+
+The project must stay within Replit’s free compute limits.
+
+Avoid heavy dependencies or background workers.
+
+No database required — read-only access to GitHub content is enough.
+
+Ensure the app launches with a single app.py file entry point.
+
+✅ Optional Future Enhancements
+
+Admin panel to refresh or sync installer list manually.
+
+GitHub OAuth login for seamless access control.
+
+Version grouping or changelog display per installer.
