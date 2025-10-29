@@ -16,7 +16,8 @@ app.secret_key = os.environ.get('SESSION_SECRET')
 
 GITHUB_REPO_OWNER = 'ASD-T2'
 GITHUB_REPO_NAME = 'ASD_Installer-repo'
-GITHUB_API_URL = f'https://api.github.com/repos/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/contents/'
+GITHUB_API_URL = "https://api.github.com/repos/ASD-T2/ASD_Installer-repo/contents/installers"
+
 
 def get_github_token():
     return os.environ.get('GITHUB_TOKEN', '')
