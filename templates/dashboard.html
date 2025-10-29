@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASD Tier 2 - Installer Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <nav class="bg-white shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center">
+                    <h1 class="text-2xl font-bold text-gray-800">ASD Tier 2 Installer Repository</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span class="text-gray-600">Welcome, <strong>{{ username }}</strong></span>
+                    <a href="{{ url_for('logout') }}" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition duration-200">
+                        Logout
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+    
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {% if error %}
+        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-6">
+            <p class="font-semibold">Error loading installer files</p>
+            <p class="text-sm">{{ error }}</p>
+            <p class="text-sm mt-2">Please check your GitHub connection or contact your administrator.</p>
+        </div>
+        {% endif %}
+        
+        <div class="mb-6">
+            <input 
+                type="text" 
+                id="searchInput" 
+                placeholder="Search installers by name, version, or description..." 
+                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+        </div>
+        
+        <div class="mb-4 flex justify-between items-center">
+            <h2 class="text-xl font-semibold text-gray-700">
+                Available Installers <span id="fileCount" class="text-gray-500">({{ files|length }})</span>
+            </h2>
+            <button 
+                onclick="refreshFiles()" 
+                class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition duration-200"
+            >
+                Refresh
+            </button>
+        </div>
+        
+        {% if files|length == 0 %}
+        <div class="bg-yellow-100 border border-yellow-400 text-yellow-800 px-4 py-3 rounded-lg">
+            <p class="font-semibold">No installer files found</p>
+            <p class="text-sm">Please check the GitHub repository or contact your administrator.</p>
+        </div>
+        {% else %}
+        <div id="fileGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {% for file in files %}
+            <div class="file-card bg-white rounded-lg shadow-md hover:shadow-xl transition-shadow duration-200 p-6" 
+                 data-name="{{ file.name|lower }}" 
+                 data-version="{{ file.version|lower }}" 
+                 data-description="{{ file.description|lower }}"
+                 data-path="{{ file.path|lower }}">
+                <div class="flex items-start justify-between mb-4">
+                    <div class="flex-1">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-1 break-words">{{ file.name }}</h3>
+                        {% if file.path != file.name %}
+                        <p class="text-xs text-gray-500 mb-1">📁 {{ file.path }}</p>
+                        {% endif %}
+                        <p class="text-sm text-gray-600">{{ file.description }}</p>
+                    </div>
+                </div>
+                
+                <div class="space-y-2 mb-4">
+                    <div class="flex justify-between text-sm">
+                        <span class="text-gray-600">Version:</span>
+                        <span class="font-semibold text-gray-800">{{ file.version }}</span>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span class="text-gray-600">Size:</span>
+                        <span class="font-semibold text-gray-800">{{ file.size }}</span>
+                    </div>
+                </div>
+                
+                <a 
+                    href="{{ file.download_url }}" 
+                    download
+                    class="block w-full bg-green-500 hover:bg-green-600 text-white text-center font-semibold py-2 rounded-lg transition duration-200"
+                >
+                    Download
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+        
+        <div id="noResults" class="hidden bg-gray-100 border border-gray-300 text-gray-700 px-4 py-8 rounded-lg text-center">
+            <p class="text-lg font-semibold">No installers match your search</p>
+            <p class="text-sm mt-2">Try adjusting your search terms</p>
+        </div>
+        {% endif %}
+    </main>
+    
+    <script>
+        const searchInput = document.getElementById('searchInput');
+        const fileCards = document.querySelectorAll('.file-card');
+        const fileCount = document.getElementById('fileCount');
+        const noResults = document.getElementById('noResults');
+        const fileGrid = document.getElementById('fileGrid');
+        
+        searchInput.addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase().trim();
+            let visibleCount = 0;
+            
+            fileCards.forEach(card => {
+                const name = card.getAttribute('data-name');
+                const version = card.getAttribute('data-version');
+                const description = card.getAttribute('data-description');
+                const path = card.getAttribute('data-path');
+                
+                if (name.includes(searchTerm) || version.includes(searchTerm) || description.includes(searchTerm) || path.includes(searchTerm)) {
+                    card.classList.remove('hidden');
+                    visibleCount++;
+                } else {
+                    card.classList.add('hidden');
+                }
+            });
+            
+            fileCount.textContent = `(${visibleCount})`;
+            
+            if (visibleCount === 0 && searchTerm !== '') {
+                noResults.classList.remove('hidden');
+                fileGrid.classList.add('hidden');
+            } else {
+                noResults.classList.add('hidden');
+                fileGrid.classList.remove('hidden');
+            }
+        });
+        
+        function refreshFiles() {
+            location.reload();
+        }
+    </script>
+</body>
+</html>
