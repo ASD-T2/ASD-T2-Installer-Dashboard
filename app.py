@@ -2,6 +2,15 @@ import os
 import sys
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 import requests
+import time
+
+# Simple in-memory cache
+CACHE = {
+    "timestamp": 0,
+    "data": []
+}
+
+CACHE_TTL = 300  # seconds (5 minutes)
 
 required_secrets = ['SESSION_SECRET', 'APP_USERNAME', 'APP_PASSWORD']
 missing_secrets = [secret for secret in required_secrets if not os.environ.get(secret)]
@@ -29,15 +38,29 @@ def check_credentials(username, password):
 
 def fetch_installer_files():
     try:
+        # Check cache first
+        now = time.time()
+        if CACHE["data"] and (now - CACHE["timestamp"] < CACHE_TTL):
+            print("[DEBUG] Using cached installer list")
+            return CACHE["data"], None
+
+        # No valid cache — fetch from GitHub
         headers = {}
         github_token = get_github_token()
         if github_token:
             headers['Authorization'] = f'token {github_token}'
-        
+        print(f"[DEBUG] GitHub token loaded: {'Yes' if github_token else 'No'}")
+
         installer_files = []
         fetch_files_recursive(GITHUB_API_URL, headers, installer_files)
-        
+
+        # Update cache
+        CACHE["data"] = installer_files
+        CACHE["timestamp"] = time.time()
+        print("[DEBUG] Cache updated with new data")
+
         return installer_files, None
+
     except requests.exceptions.RequestException as e:
         error_msg = f"Failed to connect to GitHub: {str(e)}"
         print(f"Error fetching files: {error_msg}")
@@ -50,7 +73,11 @@ def fetch_installer_files():
 def fetch_files_recursive(url, headers, installer_files, path=''):
     try:
         response = requests.get(url, headers=headers, timeout=10)
-        
+        print(f"[DEBUG] Fetching from: {url}")
+        print(f"[DEBUG] API Status: {response.status_code}")
+        if response.status_code != 200:
+            print(f"[DEBUG] Response snippet: {response.text[:200]}")
+
         if response.status_code == 200:
             items = response.json()
             
@@ -155,11 +182,76 @@ def api_files():
     if error:
         return jsonify({'error': error, 'files': []}), 500
     return jsonify(installer_files)
+from flask import send_file
+import io
+
+@app.route('/download/<path:file_path>')
+def download_file(file_path):
+    # Ensure user is logged in
+    if 'logged_in' not in session:
+        return redirect(url_for('login'))
+
+    # Construct the GitHub API URL for the file
+    api_url = f"https://api.github.com/repos/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/contents/installers/{file_path}"
+
+    headers = {}
+    github_token = get_github_token()
+    if github_token:
+        headers['Authorization'] = f'token {github_token}'
+
+    # Get metadata for the file
+    response = requests.get(api_url, headers=headers)
+    if response.status_code == 200:
+        content = response.json()
+        download_url = content.get('download_url')
+        if not download_url:
+            return "Download URL not found in response.", 400
+
+        # Fetch the actual file data
+        file_data = requests.get(download_url).content
+        filename = file_path.split('/')[-1]
+
+        return send_file(
+            io.BytesIO(file_data),
+            as_attachment=True,
+            download_name=filename
+        )
+    elif response.status_code == 404:
+        return f"File not found: {file_path}", 404
+    elif response.status_code == 403:
+        return "Access forbidden — check your GitHub token permissions.", 403
+    else:
+        return f"Unexpected error ({response.status_code}) retrieving file.", 500
+
+@app.route('/clear_cache', methods=['POST'])
+def clear_cache():
+    if 'logged_in' not in session:
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
+
+    CACHE["data"] = []
+    CACHE["timestamp"] = 0
+    print("[DEBUG] Cache cleared manually via Refresh button")
+    return jsonify({"status": "success", "message": "Cache cleared"})
 
 @app.route('/logout')
 def logout():
     session.clear()
     return redirect(url_for('login'))
+
+from flask import request  # if not already at the top of your file
+
+@app.route('/ping')
+def ping():
+    # Retrieve key from URL parameter (?key=YOURSECRET)
+    provided_key = request.args.get('key')
+
+    # Compare it with your stored secret
+    expected_key = os.environ.get('PING_KEY')
+
+    if provided_key != expected_key:
+        return 'unauthorized', 403
+
+    return 'pong', 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)

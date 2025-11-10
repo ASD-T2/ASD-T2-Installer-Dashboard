@@ -46,11 +46,16 @@
                 Available Installers <span id="fileCount" class="text-gray-500">({{ files|length }})</span>
             </h2>
             <button 
+                id="refreshButton"
                 onclick="refreshFiles()" 
-                class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition duration-200"
+                class="flex items-center bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-                Refresh
+                <svg id="refreshIcon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v6h6M20 20v-6h-6M4 10a8 8 0 0114.32-4.906M20 14a8 8 0 01-14.32 4.906" />
+                </svg>
+                <span id="refreshText">Refresh</span>
             </button>
+
         </div>
         
         {% if files|length == 0 %}
@@ -88,12 +93,12 @@
                 </div>
                 
                 <a 
-                    href="{{ file.download_url }}" 
-                    download
+                    href="{{ url_for('download_file', file_path=file.path) }}" 
                     class="block w-full bg-green-500 hover:bg-green-600 text-white text-center font-semibold py-2 rounded-lg transition duration-200"
                 >
                     Download
                 </a>
+
             </div>
             {% endfor %}
         </div>
@@ -141,9 +146,39 @@
             }
         });
         
-        function refreshFiles() {
-            location.reload();
+        async function refreshFiles() {
+            const refreshButton = document.getElementById('refreshButton');
+            const refreshText = document.getElementById('refreshText');
+            const refreshIcon = document.getElementById('refreshIcon');
+
+            // Disable button and show "Refreshing..."
+            refreshButton.disabled = true;
+            refreshText.textContent = "Refreshing...";
+            refreshIcon.classList.add("animate-spin");
+
+            try {
+                const response = await fetch("/clear_cache", {
+                    method: "POST"
+                });
+
+                if (response.ok) {
+                    console.log("Cache cleared. Reloading...");
+                    location.reload();
+                } else {
+                    alert("Failed to clear cache. Please try again.");
+                }
+            } catch (error) {
+                alert("An error occurred while refreshing.");
+                console.error(error);
+            } finally {
+                // Reset in case reload fails
+                refreshButton.disabled = false;
+                refreshText.textContent = "Refresh";
+                refreshIcon.classList.remove("animate-spin");
+            }
         }
+
+
     </script>
 </body>
 </html>
