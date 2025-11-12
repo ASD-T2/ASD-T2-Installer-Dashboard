@@ -253,5 +253,9 @@ def ping():
 
     return 'pong', 200
 
+@app.before_first_request
+def warm_up():
+    print("[INFO] App warmed up and ready.")
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)
