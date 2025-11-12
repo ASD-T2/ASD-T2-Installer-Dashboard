@@ -253,7 +253,7 @@ def ping():
 
     return 'pong', 200
 
-@app.before_first_request
+@app.before_request
 def warm_up():
     print("[INFO] App warmed up and ready.")
 
