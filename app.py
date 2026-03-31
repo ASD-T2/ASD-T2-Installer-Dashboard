@@ -44,30 +44,53 @@ def fetch_installer_files():
             print("[DEBUG] Using cached installer list")
             return CACHE["data"], None
 
-        # No valid cache — fetch from GitHub
         headers = {}
         github_token = get_github_token()
         if github_token:
             headers['Authorization'] = f'token {github_token}'
         print(f"[DEBUG] GitHub token loaded: {'Yes' if github_token else 'No'}")
 
-        installer_files = []
-        fetch_files_recursive(GITHUB_API_URL, headers, installer_files)
+        # Fetch installers.json from the repo
+        json_api_url = f"https://api.github.com/repos/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/contents/data/installers.json"
+        response = requests.get(json_api_url, headers=headers, timeout=10)
+
+        print(f"[DEBUG] Fetching installers.json from: {json_api_url}")
+        print(f"[DEBUG] API Status: {response.status_code}")
+
+        if response.status_code != 200:
+            return [], f"Failed to load installers.json (status {response.status_code})"
+
+        content = response.json()
+        download_url = content.get("download_url")
+
+        if not download_url:
+            return [], "Download URL not found for installers.json"
+
+        json_response = requests.get(download_url, timeout=10)
+        if json_response.status_code != 200:
+            return [], f"Failed to download installers.json (status {json_response.status_code})"
+
+        installer_files = json_response.json()
+
+        # Add size placeholder if not present, so dashboard doesn't break
+        for item in installer_files:
+            if "size" not in item:
+                item["size"] = "N/A"
 
         # Update cache
         CACHE["data"] = installer_files
         CACHE["timestamp"] = time.time()
-        print("[DEBUG] Cache updated with new data")
+        print("[DEBUG] Cache updated with new data from installers.json")
 
         return installer_files, None
 
     except requests.exceptions.RequestException as e:
         error_msg = f"Failed to connect to GitHub: {str(e)}"
-        print(f"Error fetching files: {error_msg}")
+        print(f"Error fetching installers.json: {error_msg}")
         return [], error_msg
     except Exception as e:
         error_msg = f"An unexpected error occurred: {str(e)}"
-        print(f"Error fetching files: {error_msg}")
+        print(f"Error fetching installers.json: {error_msg}")
         return [], error_msg
 
 def fetch_files_recursive(url, headers, installer_files, path=''):
