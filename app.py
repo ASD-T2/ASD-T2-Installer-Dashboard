@@ -278,7 +278,7 @@ def download_file(file_path):
     elif response.status_code == 403:
         return "Access forbidden — check your GitHub token permissions.", 403
     else:
-        return f"Unexpected error ({response.status_code}) retrieving file.", 500v
+        return f"Unexpected error ({response.status_code}) retrieving file.", 500
 
 @app.route('/clear_cache', methods=['POST'])
 def clear_cache():
