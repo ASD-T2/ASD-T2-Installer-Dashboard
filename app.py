@@ -80,34 +80,61 @@ def fetch_files_recursive(url, headers, installer_files, path=''):
 
         if response.status_code == 200:
             items = response.json()
-            
-            for item in items:
-                if item['type'] == 'file':
-                    file_name = item['name']
-                    file_size = item.get('size', 0)
-                    download_url = item['download_url']
-                    file_path = f"{path}/{file_name}" if path else file_name
-                    
-                    version = extract_version(file_name)
+
+            # Look at files in the current folder first
+            files_in_folder = [item for item in items if item['type'] == 'file']
+
+            # If this folder has any package ZIPs, only show those
+            package_files = [
+                f for f in files_in_folder
+                if f['name'].lower().endswith('-package.zip')
+            ]
+
+            if package_files:
+                files_to_show = package_files
+            else:
+                # Otherwise show standalone installers only
+                files_to_show = [
+                    f for f in files_in_folder
+                    if f['name'].lower().endswith('.exe')
+                    or f['name'].lower().endswith('.msi')
+                ]
+
+            for item in files_to_show:
+                file_name = item['name']
+                file_size = item.get('size', 0)
+                download_url = item['download_url']
+                file_path = f"{path}/{file_name}" if path else file_name
+
+                version = extract_version(file_name)
+
+                if file_name.lower().endswith('-package.zip'):
+                    description = "Installer package"
+                else:
                     description = generate_description(file_name)
-                    
-                    installer_files.append({
-                        'name': file_name,
-                        'path': file_path,
-                        'version': version,
-                        'description': description,
-                        'size': format_file_size(file_size),
-                        'download_url': download_url
-                    })
-                elif item['type'] == 'dir':
+
+                installer_files.append({
+                    'name': file_name,
+                    'path': file_path,
+                    'version': version,
+                    'description': description,
+                    'size': format_file_size(file_size),
+                    'download_url': download_url
+                })
+
+            # Recurse into subfolders
+            for item in items:
+                if item['type'] == 'dir':
                     new_path = f"{path}/{item['name']}" if path else item['name']
                     fetch_files_recursive(item['url'], headers, installer_files, new_path)
+
         elif response.status_code == 404:
             print(f"Repository or path not found: {url}")
         elif response.status_code == 403:
             print(f"Access forbidden (rate limit or permissions): {url}")
         else:
             print(f"GitHub API returned status {response.status_code} for {url}")
+
     except Exception as e:
         print(f"Error fetching {url}: {e}")
 
