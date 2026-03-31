@@ -232,7 +232,7 @@ def api_files():
     if error:
         return jsonify({'error': error, 'files': []}), 500
     return jsonify(installer_files)
-from flask import send_file
+from flask import send_file, redirect
 import io
 
 @app.route('/download/<path:file_path>')
@@ -241,15 +241,23 @@ def download_file(file_path):
     if 'logged_in' not in session:
         return redirect(url_for('login'))
 
-    # Construct the GitHub API URL for the file
-    api_url = f"https://api.github.com/repos/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/contents/installers/{file_path}"
+    # If this is already a full external URL (GitHub Releases, OneDrive, etc.),
+    # just redirect the user straight to it.
+    if file_path.startswith('http://') or file_path.startswith('https://'):
+        return redirect(file_path)
+
+    # Otherwise treat it as a repo-relative installer path
+    clean_path = file_path
+    if clean_path.startswith('installers/'):
+        clean_path = clean_path[len('installers/'):]
+
+    api_url = f"https://api.github.com/repos/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/contents/installers/{clean_path}"
 
     headers = {}
     github_token = get_github_token()
     if github_token:
         headers['Authorization'] = f'token {github_token}'
 
-    # Get metadata for the file
     response = requests.get(api_url, headers=headers)
     if response.status_code == 200:
         content = response.json()
@@ -257,9 +265,8 @@ def download_file(file_path):
         if not download_url:
             return "Download URL not found in response.", 400
 
-        # Fetch the actual file data
         file_data = requests.get(download_url).content
-        filename = file_path.split('/')[-1]
+        filename = clean_path.split('/')[-1]
 
         return send_file(
             io.BytesIO(file_data),
@@ -271,7 +278,7 @@ def download_file(file_path):
     elif response.status_code == 403:
         return "Access forbidden — check your GitHub token permissions.", 403
     else:
-        return f"Unexpected error ({response.status_code}) retrieving file.", 500
+        return f"Unexpected error ({response.status_code}) retrieving file.", 500v
 
 @app.route('/clear_cache', methods=['POST'])
 def clear_cache():
