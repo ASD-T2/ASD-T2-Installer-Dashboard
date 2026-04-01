@@ -241,10 +241,27 @@ def download_file(file_path):
     if 'logged_in' not in session:
         return redirect(url_for('login'))
 
+    headers = {}
+    github_token = get_github_token()
+    if github_token:
+        headers['Authorization'] = f'token {github_token}'
+
     # If this is already a full external URL (GitHub Releases, OneDrive, etc.),
-    # just redirect the user straight to it.
+    # download it through the app instead of redirecting the browser.
     if file_path.startswith('http://') or file_path.startswith('https://'):
-        return redirect(file_path)
+        response = requests.get(file_path, headers=headers, stream=True, allow_redirects=True, timeout=60)
+
+        if response.status_code != 200:
+            return f"File not found: {file_path}", response.status_code
+
+        # Try to get filename from URL
+        filename = file_path.split('/')[-1]
+
+        return send_file(
+            io.BytesIO(response.content),
+            as_attachment=True,
+            download_name=filename
+        )
 
     # Otherwise treat it as a repo-relative installer path
     clean_path = file_path
@@ -253,19 +270,14 @@ def download_file(file_path):
 
     api_url = f"https://api.github.com/repos/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/contents/installers/{clean_path}"
 
-    headers = {}
-    github_token = get_github_token()
-    if github_token:
-        headers['Authorization'] = f'token {github_token}'
-
-    response = requests.get(api_url, headers=headers)
+    response = requests.get(api_url, headers=headers, timeout=30)
     if response.status_code == 200:
         content = response.json()
         download_url = content.get('download_url')
         if not download_url:
             return "Download URL not found in response.", 400
 
-        file_data = requests.get(download_url).content
+        file_data = requests.get(download_url, headers=headers, timeout=60).content
         filename = clean_path.split('/')[-1]
 
         return send_file(
