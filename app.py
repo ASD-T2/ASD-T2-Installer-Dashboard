@@ -47,7 +47,7 @@ def fetch_installer_files():
         headers = {}
         github_token = get_github_token()
         if github_token:
-            headers['Authorization'] = f'token {github_token}'
+            headers['Authorization'] = f'Bearer {github_token}'
         print(f"[DEBUG] GitHub token loaded: {'Yes' if github_token else 'No'}")
 
         # Fetch installers.json from the repo
@@ -244,7 +244,7 @@ def download_file(file_path):
     headers = {}
     github_token = get_github_token()
     if github_token:
-        headers['Authorization'] = f'token {github_token}'
+        headers['Authorization'] = f'Bearer {github_token}'
 
     installer_files, error = fetch_installer_files()
     if error:
@@ -259,7 +259,7 @@ def download_file(file_path):
     if not matched_item:
         return f"File not found: {file_path}", 404
 
-    # --- Case 1: GitHub Release asset ---
+        # --- Case 1: GitHub Release asset ---
     if matched_item.get('release_tag'):
         release_tag = matched_item['release_tag']
         filename = matched_item['filename']
@@ -279,21 +279,12 @@ def download_file(file_path):
         if not asset:
             return f"Release asset not found: {filename}", 404
 
-        asset_id = asset['id']
-        asset_url = f"https://api.github.com/repos/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/releases/assets/{asset_id}"
+        # Redirect browser to the asset's browser download URL
+        browser_download_url = asset.get('browser_download_url')
+        if not browser_download_url:
+            return f"Download URL not found for release asset: {filename}", 400
 
-        asset_headers = headers.copy()
-        asset_headers['Accept'] = 'application/octet-stream'
-
-        asset_resp = requests.get(asset_url, headers=asset_headers, allow_redirects=True, timeout=120)
-        if asset_resp.status_code not in (200, 302):
-            return f"File not found: {filename}", asset_resp.status_code
-
-        return send_file(
-            io.BytesIO(asset_resp.content),
-            as_attachment=True,
-            download_name=filename
-        )
+        return redirect(browser_download_url)
 
     # --- Case 2: Repo-hosted installer file (old working logic) ---
     repo_path = matched_item.get('path')
