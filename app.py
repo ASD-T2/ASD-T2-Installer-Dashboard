@@ -234,63 +234,103 @@ def api_files():
     return jsonify(installer_files)
 from flask import send_file, redirect
 import io
+import requests
 
 @app.route('/download/<path:file_path>')
 def download_file(file_path):
-    # Ensure user is logged in
     if 'logged_in' not in session:
         return redirect(url_for('login'))
 
     headers = {}
     github_token = get_github_token()
     if github_token:
-        headers['Authorization'] = f'token {github_token}'
+        headers['Authorization'] = f'Bearer {github_token}'
 
-    # If this is already a full external URL (GitHub Releases, OneDrive, etc.),
-    # download it through the app instead of redirecting the browser.
-    if file_path.startswith('http://') or file_path.startswith('https://'):
-        response = requests.get(file_path, headers=headers, stream=True, allow_redirects=True, timeout=60)
+    installer_files, error = fetch_installer_files()
+    if error:
+        return error, 500
 
-        if response.status_code != 200:
-            return f"File not found: {file_path}", response.status_code
+    matched_item = None
+    for item in installer_files:
+        if item.get('path') == file_path or item.get('filename') == file_path:
+            matched_item = item
+            break
 
-        # Try to get filename from URL
-        filename = file_path.split('/')[-1]
+    if not matched_item:
+        return f"File not found: {file_path}", 404
+
+    # GitHub Release asset
+    if matched_item.get('release_tag'):
+        release_tag = matched_item['release_tag']
+        filename = matched_item['filename']
+
+        release_url = f"https://api.github.com/repos/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/releases/tags/{release_tag}"
+        release_headers = headers.copy()
+        release_headers['Accept'] = 'application/vnd.github+json'
+
+        release_resp = requests.get(release_url, headers=release_headers, timeout=30)
+        if release_resp.status_code != 200:
+            return f"Release not found for tag: {release_tag}", release_resp.status_code
+
+        release_data = release_resp.json()
+        assets = release_data.get('assets', [])
+        asset = next((a for a in assets if a.get('name') == filename), None)
+
+        if not asset:
+            return f"Release asset not found: {filename}", 404
+
+        asset_id = asset['id']
+        asset_url = f"https://api.github.com/repos/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/releases/assets/{asset_id}"
+
+        asset_headers = headers.copy()
+        asset_headers['Accept'] = 'application/octet-stream'
+
+        asset_resp = requests.get(asset_url, headers=asset_headers, allow_redirects=True, timeout=120)
+        if asset_resp.status_code not in (200, 302):
+            return f"File not found: {filename}", asset_resp.status_code
 
         return send_file(
-            io.BytesIO(response.content),
+            io.BytesIO(asset_resp.content),
             as_attachment=True,
             download_name=filename
         )
 
-    # Otherwise treat it as a repo-relative installer path
-    clean_path = file_path
+    # Repo-hosted installer
+    repo_path = matched_item.get('path')
+    if not repo_path:
+        return f"File not found: {file_path}", 404
+
+    clean_path = repo_path
     if clean_path.startswith('installers/'):
         clean_path = clean_path[len('installers/'):]
 
     api_url = f"https://api.github.com/repos/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/contents/installers/{clean_path}"
+    repo_resp = requests.get(api_url, headers=headers, timeout=30)
 
-    response = requests.get(api_url, headers=headers, timeout=30)
-    if response.status_code == 200:
-        content = response.json()
+    if repo_resp.status_code == 200:
+        content = repo_resp.json()
         download_url = content.get('download_url')
         if not download_url:
             return "Download URL not found in response.", 400
 
-        file_data = requests.get(download_url, headers=headers, timeout=60).content
-        filename = clean_path.split('/')[-1]
+        file_resp = requests.get(download_url, headers=headers, timeout=120)
+        if file_resp.status_code != 200:
+            return f"File not found: {repo_path}", file_resp.status_code
+
+        filename = matched_item['filename']
 
         return send_file(
-            io.BytesIO(file_data),
+            io.BytesIO(file_resp.content),
             as_attachment=True,
             download_name=filename
         )
-    elif response.status_code == 404:
-        return f"File not found: {file_path}", 404
-    elif response.status_code == 403:
+
+    elif repo_resp.status_code == 404:
+        return f"File not found: {repo_path}", 404
+    elif repo_resp.status_code == 403:
         return "Access forbidden — check your GitHub token permissions.", 403
     else:
-        return f"Unexpected error ({response.status_code}) retrieving file.", 500
+        return f"Unexpected error ({repo_resp.status_code}) retrieving file.", 500
 
 @app.route('/clear_cache', methods=['POST'])
 def clear_cache():
