@@ -244,7 +244,7 @@ def download_file(file_path):
     headers = {}
     github_token = get_github_token()
     if github_token:
-        headers['Authorization'] = f'Bearer {github_token}'
+        headers['Authorization'] = f'token {github_token}'
 
     installer_files, error = fetch_installer_files()
     if error:
@@ -259,7 +259,7 @@ def download_file(file_path):
     if not matched_item:
         return f"File not found: {file_path}", 404
 
-    # GitHub Release asset
+    # --- Case 1: GitHub Release asset ---
     if matched_item.get('release_tag'):
         release_tag = matched_item['release_tag']
         filename = matched_item['filename']
@@ -295,7 +295,7 @@ def download_file(file_path):
             download_name=filename
         )
 
-    # Repo-hosted installer
+    # --- Case 2: Repo-hosted installer file (old working logic) ---
     repo_path = matched_item.get('path')
     if not repo_path:
         return f"File not found: {file_path}", 404
@@ -305,32 +305,28 @@ def download_file(file_path):
         clean_path = clean_path[len('installers/'):]
 
     api_url = f"https://api.github.com/repos/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/contents/installers/{clean_path}"
-    repo_resp = requests.get(api_url, headers=headers, timeout=30)
 
-    if repo_resp.status_code == 200:
-        content = repo_resp.json()
+    response = requests.get(api_url, headers=headers, timeout=30)
+    if response.status_code == 200:
+        content = response.json()
         download_url = content.get('download_url')
         if not download_url:
             return "Download URL not found in response.", 400
 
-        file_resp = requests.get(download_url, headers=headers, timeout=120)
-        if file_resp.status_code != 200:
-            return f"File not found: {repo_path}", file_resp.status_code
-
-        filename = matched_item['filename']
+        file_data = requests.get(download_url, headers=headers, timeout=60).content
+        filename = clean_path.split('/')[-1]
 
         return send_file(
-            io.BytesIO(file_resp.content),
+            io.BytesIO(file_data),
             as_attachment=True,
             download_name=filename
         )
-
-    elif repo_resp.status_code == 404:
+    elif response.status_code == 404:
         return f"File not found: {repo_path}", 404
-    elif repo_resp.status_code == 403:
+    elif response.status_code == 403:
         return "Access forbidden — check your GitHub token permissions.", 403
     else:
-        return f"Unexpected error ({repo_resp.status_code}) retrieving file.", 500
+        return f"Unexpected error ({response.status_code}) retrieving file.", 500
 
 @app.route('/clear_cache', methods=['POST'])
 def clear_cache():
